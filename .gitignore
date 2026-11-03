@@ -1,0 +1,11 @@
+# local environment and generated files
+.venv/
+__pycache__/
+cache/
+logs/
+output/
+logs_first_run.txt
+
+# private: never publish
+screener_session.txt
+watchlist.json

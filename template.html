@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daily Stock Screener</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<style>
+:root{
+  --bg:#f4f5f7; --card:#ffffff; --ink:#16191d; --muted:#5f6873; --line:#e2e5ea; --accent:#2f6fdb; --accent-ink:#ffffff;
+  --sel:#eaf1fd; --up:#14874d; --down:#c93b3b; --chip:#eef1f5; --star:#e0a100;
+  --c-order:#14874d; --c-holding:#2f6fdb; --c-results:#8a4fd6; --c-corp:#d98200; --c-neg:#d64545; --c-news:#c2569b;
+  --c-price:#7a8291; --c-other:#a3abb5; --c-upcoming:#0f9bb0; --c-ma:#d98200; --c-price-line:#16191d; --c-dma:#9aa3ad;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0e1115; --card:#161a20; --ink:#e7eaee; --muted:#9aa3ad; --line:#2a3038; --accent:#6b9cf0; --accent-ink:#0e1115;
+  --sel:#1c2a40; --up:#3fbf7f; --down:#ef6b6b; --chip:#222831; --star:#f2c14e;
+  --c-order:#3fbf7f; --c-holding:#6b9cf0; --c-results:#b08af0; --c-corp:#f0a83a; --c-neg:#ef6b6b; --c-news:#e07fbf;
+  --c-price:#8d96a1; --c-other:#6b737d; --c-upcoming:#38c4d6; --c-ma:#f0a83a; --c-price-line:#e7eaee; --c-dma:#6b737d;
+}}
+:root[data-theme="dark"]{
+  --bg:#0e1115; --card:#161a20; --ink:#e7eaee; --muted:#9aa3ad; --line:#2a3038; --accent:#6b9cf0; --accent-ink:#0e1115;
+  --sel:#1c2a40; --up:#3fbf7f; --down:#ef6b6b; --chip:#222831; --star:#f2c14e;
+  --c-order:#3fbf7f; --c-holding:#6b9cf0; --c-results:#b08af0; --c-corp:#f0a83a; --c-neg:#ef6b6b; --c-news:#e07fbf;
+  --c-price:#8d96a1; --c-other:#6b737d; --c-upcoming:#38c4d6; --c-ma:#f0a83a; --c-price-line:#e7eaee; --c-dma:#6b737d;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+button,input,select{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+button{cursor:pointer} button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+button:disabled{opacity:.6;cursor:progress}
+.muted{color:var(--muted)} .small{font-size:12px} .up{color:var(--up)} .down{color:var(--down)}
+
+/* top bar */
+.top{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--line)}
+.top-in{display:flex;align-items:center;gap:16px;padding:10px 16px;flex-wrap:wrap}
+.brand{font-weight:700;font-size:16px;letter-spacing:-.01em;white-space:nowrap}
+.tabs{display:flex;gap:4px;flex-wrap:wrap}
+.tabs button{border:0;background:transparent;padding:7px 12px;border-radius:8px;color:var(--muted);font-weight:550}
+.tabs button.on{background:var(--chip);color:var(--ink)}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+#status{font-size:12px;color:var(--muted)}
+
+/* split layout */
+.split{display:grid;grid-template-columns:380px minmax(0,1fr);height:calc(100vh - 57px)}
+.side{border-right:1px solid var(--line);overflow:auto;padding:14px 14px 40px}
+.main{overflow:auto;padding:16px 20px 48px}
+@media (max-width:900px){
+  .split{grid-template-columns:1fr;height:auto}
+  .side{border-right:0;border-bottom:1px solid var(--line);max-height:none}
+  .main{padding:16px}
+}
+.sec{margin:6px 0 16px}
+.sec h3{font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:0 0 8px;display:flex;justify-content:space-between}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px}
+.sc{padding:10px 12px;margin-bottom:8px;cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center}
+.sc:hover{border-color:var(--accent)}
+.sc.sel{border-color:var(--accent);background:var(--sel)}
+.sc .sym{font-weight:650;font-size:15px}
+.sc .nm{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc .rt{text-align:right;font-variant-numeric:tabular-nums;font-size:12.5px}
+.sc .why{grid-column:1/-1;font-size:12px;color:var(--muted);margin-top:2px}
+.sc .tag{display:inline-block;font-size:10.5px;font-weight:650;padding:1px 7px;border-radius:99px;color:#fff;margin-right:6px;vertical-align:1px}
+.score{font-variant-numeric:tabular-nums;font-weight:650;background:var(--chip);border-radius:6px;padding:0 7px;font-size:12.5px;margin-left:6px}
+.star{border:0;background:transparent;padding:0 2px;font-size:16px;line-height:1;color:var(--muted)}
+.star.on{color:var(--star)}
+.empty{padding:14px;border:1px dashed var(--line);border-radius:12px;color:var(--muted);font-size:13px}
+.searchbox{display:flex;gap:6px;margin-bottom:10px}
+.searchbox input{flex:1;min-width:0}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.chips button{padding:3px 10px;font-size:12.5px;border-radius:99px}
+.chips button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+
+/* detail */
+.dh{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start}
+.dh h2{margin:0;font-size:22px;letter-spacing:-.01em}
+.dh .acts{display:flex;gap:8px;align-items:center}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin:14px 0}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:12px;color:var(--muted)}
+.kpi b{display:block;color:var(--ink);font-size:15px;font-variant-numeric:tabular-nums}
+.panel{padding:14px 16px;margin-bottom:14px}
+.chartbox{position:relative;height:380px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.cols{display:grid;grid-template-columns:3fr 2fr;gap:14px}
+@media (max-width:1150px){.cols{grid-template-columns:1fr}}
+.panel h4{margin:0 0 8px;font-size:13px}
+.ev{display:flex;gap:10px;padding:7px 0;border-top:1px solid var(--line);font-size:13px}
+.ev .d{flex:0 0 74px;color:var(--muted);font-variant-numeric:tabular-nums}
+.dot{flex:0 0 9px;height:9px;border-radius:50%;margin-top:6px}
+.evfilter{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.evfilter button{padding:2px 9px;font-size:12px;border-radius:99px}
+.evfilter button.on{background:var(--chip);border-color:var(--ink)}
+.evlist{max-height:420px;overflow:auto;padding-right:4px}
+.bd div{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-top:1px dashed var(--line);font-size:12.5px}
+.bd span:last-child{font-variant-numeric:tabular-nums;font-weight:650}
+.note{background:var(--chip);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--muted);margin-bottom:12px}
+.loading{padding:40px;text-align:center;color:var(--muted)}
+
+/* docs */
+.docs{max-width:860px;margin:0 auto;padding:24px 20px 64px}
+.docs h1{font-size:26px} .docs h2{font-size:19px;margin-top:30px;border-bottom:1px solid var(--line);padding-bottom:6px}
+.docs h3{font-size:15px;margin-top:22px}
+.docs table{border-collapse:collapse;width:100%;font-size:13px;margin:10px 0;display:block;overflow-x:auto}
+.docs th,.docs td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}
+.docs th{background:var(--chip)}
+.docs code{background:var(--chip);padding:1px 5px;border-radius:5px;font-size:12.5px}
+.docs pre{background:var(--chip);padding:12px;border-radius:10px;overflow:auto}
+.docs pre code{background:none;padding:0}
+.hidden{display:none !important}
+</style>
+</head>
+<body>
+<div class="top"><div class="top-in">
+  <div class="brand">📈 Daily Screener</div>
+  <nav class="tabs" id="tabs">
+    <button data-tab="dash" class="on">Dashboard</button>
+    <button data-tab="analyze">Analyze</button>
+    <button data-tab="watch">Watchlist <span id="wcount" class="muted"></span></button>
+    <button data-tab="docs">Documentation</button>
+  </nav>
+  <div class="top-right">
+    <span id="status"></span>
+    <button id="refresh" class="primary" title="Fetch the latest data">⟳ Refresh</button>
+    <button id="theme" title="Toggle light/dark">◐</button>
+  </div>
+</div></div>
+
+<section id="tab-dash" class="split">
+  <aside class="side" id="side-dash"></aside>
+  <main class="main" id="main-dash"></main>
+</section>
+
+<section id="tab-analyze" class="split hidden">
+  <aside class="side">
+    <div class="searchbox"><input id="q" type="search" placeholder="Search any stock: name or symbol" autocomplete="off"></div>
+    <div class="chips" id="bchips"></div>
+    <div id="side-analyze"></div>
+  </aside>
+  <main class="main" id="main-analyze"></main>
+</section>
+
+<section id="tab-watch" class="split hidden">
+  <aside class="side" id="side-watch"></aside>
+  <main class="main" id="main-watch"></main>
+</section>
+
+<section id="tab-docs" class="hidden">
+  <article class="docs" id="docs"></article>
+</section>
+
+<script>
+let DATA = /*__DATA__*/null;
+const DOCS = /*__DOCS__*/null;
+const $ = s => document.querySelector(s);
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = (v, d=0) => v == null || Number.isNaN(v) ? '–' : Number(v).toLocaleString('en-IN', {maximumFractionDigits:d, minimumFractionDigits:d});
+const pct = v => v == null ? '–' : `<span class="${v>=0?'up':'down'}">${v>=0?'+':''}${v.toFixed(1)}%</span>`;
+const fdate = iso => new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'2-digit'});
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+
+const GROUPS = [
+  {key:'order', label:'Order wins', types:['order'], color:'--c-order', style:'triangle'},
+  {key:'holding', label:'Shareholding', types:['holding'], color:'--c-holding', style:'rectRot'},
+  {key:'results', label:'Results', types:['results'], color:'--c-results', style:'rect'},
+  {key:'corp', label:'Corporate / deals / approvals', types:['corporate','deal','approval'], color:'--c-corp', style:'star'},
+  {key:'neg', label:'Risk flags', types:['negative'], color:'--c-neg', style:'crossRot'},
+  {key:'news', label:'Web news', types:['news','analyst'], color:'--c-news', style:'circle'},
+  {key:'price', label:'Price signals', types:['price'], color:'--c-price', style:'circle'},
+  {key:'other', label:'Other filings', types:['meeting','rating','info'], color:'--c-other', style:'circle'},
+  {key:'upcoming', label:'Upcoming', types:['upcoming'], color:'--c-upcoming', style:'rectRounded'},
+];
+const groupOf = t => GROUPS.find(g => g.types.includes(t)) || GROUPS.find(g => g.key === 'other');
+const srcTag = e => e.source === 'news' ? 'news' : e.source === 'filing' ? 'filing' : '';
+const tl = t => (DATA.type_label || {})[t] || t;
+
+// ---------------------------------------------------------------- state
+let LIVE = false;                     // true when served by app.py (live search / refresh)
+let bySym = {};
+const extra = {};                     // stocks analysed on demand (not in today's screen)
+const sel = {dash: null, analyze: null, watch: null};
+const charts = {};
+let watch = store.get('scr.watchlist', []);
+let bucketFilter = 'All';
+let remoteHits = [];
+
+function indexData() { bySym = Object.fromEntries(DATA.stocks.map(s => [s.symbol, s])); }
+const stock = sym => bySym[sym] || extra[sym];
+
+// ---------------------------------------------------------------- cards
+function spark(s) {
+  const c = (s.chart?.close || []).slice(-120);
+  if (c.length < 2) return '';
+  const lo = Math.min(...c), hi = Math.max(...c), w = 84, h = 26;
+  const pts = c.map((v, i) => `${(i / (c.length - 1) * w).toFixed(1)},${(h - (v - lo) / (hi - lo || 1) * h).toFixed(1)}`).join(' ');
+  const col = c[c.length - 1] >= c[0] ? css('--up') : css('--down');
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline fill="none" stroke="${col}" stroke-width="1.5" points="${pts}"/></svg>`;
+}
+function stockCard(sym, tab, opts = {}) {
+  const s = stock(sym);
+  const on = watch.includes(sym);
+  const starBtn = `<button class="star ${on?'on':''}" data-star="${esc(sym)}" title="${on?'Remove from':'Add to'} watchlist">${on?'★':'☆'}</button>`;
+  if (!s) {
+    return `<div class="card sc ${sel[tab]===sym?'sel':''}" data-open="${esc(sym)}" data-tab="${tab}">
+      <div><span class="sym">${esc(sym)}</span> ${starBtn}<div class="nm">${esc(opts.name || (LIVE ? 'Click to analyse' : 'Not in today\'s screen'))}</div></div>
+      <div class="rt muted">${LIVE ? 'analyse →' : ''}</div></div>`;
+  }
+  const why = opts.why ?? (s.why || []).filter(w => w[0] > 0).sort((a, b) => b[0] - a[0]).slice(0, 2).map(w => w[1]).join(' · ');
+  return `<div class="card sc ${sel[tab]===sym?'sel':''}" data-open="${esc(sym)}" data-tab="${tab}">
+    <div><span class="sym">${esc(sym)}</span><span class="score">${s.score}</span> ${starBtn}<div class="nm">${esc(s.name)} · ${s.bucket || '?'} cap</div></div>
+    <div class="rt">${spark(s)}<div>₹${fmt(s.metrics.price, 1)} ${pct(s.metrics.ret1m)}</div></div>
+    ${why ? `<div class="why">${opts.tagHtml || ''}${esc(why)}</div>` : ''}
+  </div>`;
+}
+
+function renderDashSide() {
+  const b = ['Large', 'Mid', 'Small'].map(k => `<div class="sec"><h3><span>${k} cap picks</span></h3>
+      ${(DATA.picks[k] || []).map(s => stockCard(s, 'dash')).join('') || '<div class="empty">No stocks in this bucket.</div>'}</div>`).join('');
+  const c = `<div class="sec"><h3><span>Top catalysts: may spike</span></h3>${DATA.catalysts.map(c => {
+      const g = groupOf(c.event.type);
+      return stockCard(c.symbol, 'dash', {why: c.event.title, tagHtml: `<span class="tag" style="background:${css(g.color)}">${esc(tl(c.event.type))}</span>`});
+    }).join('') || '<div class="empty">No fresh catalysts in the last 30 days.</div>'}</div>`;
+  const w = `<div class="sec"><h3><span>Watchlist</span><a href="#" data-goto="watch">manage</a></h3>${
+      watch.map(s => stockCard(s, 'dash')).join('') || '<div class="empty">Star ☆ any stock to add it here.</div>'}</div>`;
+  $('#side-dash').innerHTML = b + c + w;
+}
+
+function renderWatchSide() {
+  $('#wcount').textContent = watch.length ? `(${watch.length})` : '';
+  $('#side-watch').innerHTML = `<div class="sec"><h3><span>Your watchlist</span></h3>
+    ${watch.map(s => stockCard(s, 'watch')).join('') || '<div class="empty">Your watchlist is empty. Search a stock in <a href="#" data-goto="analyze">Analyze</a> and tap ☆.</div>'}</div>
+    <p class="muted small">${LIVE ? 'Saved on this PC. Watchlist stocks are included in every daily 8 AM run.' : 'Saved in this browser only.'}</p>`;
+}
+
+function renderAnalyzeSide() {
+  const q = $('#q').value.trim().toLowerCase();
+  let list = DATA.stocks.filter(s => (bucketFilter === 'All' || s.bucket === bucketFilter) &&
+    (!q || s.symbol.toLowerCase().includes(q) || s.name.toLowerCase().includes(q)));
+  list.sort((a, b) => b.score - a.score);
+  const local = new Set(list.map(s => s.symbol));
+  const remote = remoteHits.filter(h => !local.has(h.symbol) && !bySym[h.symbol]);
+  $('#side-analyze').innerHTML =
+    (remote.length ? `<div class="sec"><h3><span>From screener.in</span></h3>${remote.map(h => stockCard(h.symbol, 'analyze', {name: h.name})).join('')}</div>` : '') +
+    `<div class="sec"><h3><span>${q ? 'Matches in today\'s screen' : 'All screened stocks · by score'}</span><span>${list.length}</span></h3>
+     ${list.map(s => stockCard(s.symbol, 'analyze')).join('') || `<div class="empty">${LIVE ? 'Searching screener.in…' : 'No match in today\'s screen. Live search of any listed company works in the desktop app.'}</div>`}</div>`;
+}
+$('#bchips').innerHTML = ['All', 'Large', 'Mid', 'Small'].map(b => `<button data-b="${b}" class="${b==='All'?'on':''}">${b}</button>`).join('');
+$('#bchips').onclick = e => { const b = e.target.closest('button'); if (!b) return; bucketFilter = b.dataset.b;
+  document.querySelectorAll('#bchips button').forEach(x => x.classList.toggle('on', x === b)); renderAnalyzeSide(); };
+
+let searchTimer;
+$('#q').addEventListener('input', () => {
+  renderAnalyzeSide();
+  clearTimeout(searchTimer);
+  const q = $('#q').value.trim();
+  if (!LIVE || q.length < 2) { remoteHits = []; return; }
+  searchTimer = setTimeout(async () => {
+    try { remoteHits = await (await fetch('/api/search?q=' + encodeURIComponent(q))).json(); } catch { remoteHits = []; }
+    renderAnalyzeSide();
+  }, 300);
+});
+
+// ---------------------------------------------------------------- detail
+async function openStock(sym, tab) {
+  sel[tab] = sym;
+  refreshSides();
+  const main = $('#main-' + tab);
+  if (!stock(sym)) {
+    if (!LIVE) { main.innerHTML = `<div class="empty">${esc(sym)} is not in today's screen. It will appear here after the next daily run picks it up.</div>`; return; }
+    main.innerHTML = `<div class="loading">Analysing ${esc(sym)} from screener.in + web news… (~10s)</div>`;
+    try {
+      const r = await fetch('/api/analyze?symbol=' + encodeURIComponent(sym));
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'failed');
+      extra[sym] = d;
+    } catch (e) { main.innerHTML = `<div class="empty">Couldn't analyse ${esc(sym)}: ${esc(e.message)}</div>`; return; }
+    if (sel[tab] !== sym) return;
+    refreshSides();
+  }
+  renderDetail(stock(sym), tab);
+  if (matchMedia('(max-width:900px)').matches) main.scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+
+function renderDetail(s, tab) {
+  const m = s.metrics, on = watch.includes(s.symbol);
+  const types = [...new Set([...s.upcoming, ...s.events].map(e => groupOf(e.type).key))];
+  $('#main-' + tab).innerHTML = `
+    <div class="dh">
+      <div><h2>${esc(s.symbol)} <span class="score">Score ${s.score}</span></h2>
+        <div class="muted">${esc(s.name)} · ${s.bucket || '?'} cap · <a href="${esc(s.url)}" target="_blank" rel="noopener">screener.in ↗</a></div></div>
+      <div class="acts"><button data-star="${esc(s.symbol)}" class="${on?'':'primary'}">${on ? '★ In watchlist' : '☆ Add to watchlist'}</button></div>
+    </div>
+    <div class="kpis">
+      <div class="kpi">Price<b>₹${fmt(m.price,1)}</b></div>
+      <div class="kpi">1 month<b>${pct(m.ret1m)}</b></div>
+      <div class="kpi">3 months<b>${pct(m.ret3m)}</b></div>
+      <div class="kpi">6-month MA<b>₹${fmt(m.ma6m,1)}</b></div>
+      <div class="kpi">50-DMA<b>₹${fmt(m.dma50,1)}</b></div>
+      <div class="kpi">RSI 14<b>${fmt(m.rsi)}</b></div>
+      <div class="kpi">52W high<b>₹${fmt(m.hi52,1)}</b></div>
+      <div class="kpi">Mcap<b>₹${fmt(s.mcap)} Cr</b></div>
+      <div class="kpi">P/E<b>${fmt(s.pe,1)}</b></div>
+      <div class="kpi">ROCE<b>${s.roce==null?'–':fmt(s.roce,1)+'%'}</b></div>
+      <div class="kpi">Promoter<b>${s.promoter==null?'–':s.promoter.toFixed(2)+'%'}</b></div>
+    </div>
+    <div class="card panel">
+      <h4>1-year price · 6-month moving average · events</h4>
+      <div class="chartbox"><canvas id="chart-${tab}"></canvas></div>
+      <div class="legend">${GROUPS.filter(g => types.includes(g.key)).map(g => `<span><i style="background:${css(g.color)}"></i>${g.label}</span>`).join('')}</div>
+    </div>
+    <div class="cols">
+      <div class="card panel">
+        <h4>Events: upcoming, then past 12 months</h4>
+        <div class="evfilter" data-evf="${tab}">
+          <button data-g="all" class="on">All</button>
+          ${GROUPS.filter(g => types.includes(g.key)).map(g => `<button data-g="${g.key}">${g.label}</button>`).join('')}
+        </div>
+        <div class="evlist" id="evlist-${tab}"></div>
+      </div>
+      <div class="card panel bd">
+        <h4>Score breakdown</h4>
+        ${s.why.map(w => `<div><span>${esc(w[1])}</span><span class="${w[0]>=0?'up':'down'}">${w[0]>0?'+':''}${w[0]}</span></div>`).join('')}
+        <div><span><b>Total</b></span><span>${s.score}</span></div>
+      </div>
+    </div>`;
+  renderEvents(s, tab, 'all');
+  drawChart(s, tab);
+}
+
+function renderEvents(s, tab, g) {
+  const list = [...s.upcoming, ...[...s.events].reverse()].filter(e => g === 'all' || groupOf(e.type).key === g);
+  $('#evlist-' + tab).innerHTML = list.map(e => {
+    const gr = groupOf(e.type), src = srcTag(e);
+    return `<div class="ev"><span class="dot" style="background:${css(gr.color)}"></span><span class="d">${fdate(e.date)}</span>
+      <span><b>${esc(tl(e.type))}</b>${src ? ` <span class="muted small">· ${src}</span>` : ''}: ${esc(e.title)}
+      ${e.detail ? `<br><span class="muted small">${esc(e.detail)}</span>` : ''}
+      ${e.url ? ` <a class="small" href="${esc(e.url)}" target="_blank" rel="noopener">↗</a>` : ''}</span></div>`;
+  }).join('') || '<p class="muted small">No events captured.</p>';
+}
+
+function addBusinessDays(iso, until) {
+  const out = [], d = new Date(iso + 'T00:00:00Z'), end = new Date(until + 'T00:00:00Z');
+  while (true) { d.setUTCDate(d.getUTCDate() + 1); if (d > end) break; if (d.getUTCDay() % 6) out.push(d.toISOString().slice(0, 10)); }
+  return out;
+}
+
+function drawChart(s, tab) {
+  if (!window.Chart) return;
+  const ch = s.chart, labels = [...ch.dates];
+  const lastUp = s.upcoming.length ? s.upcoming[s.upcoming.length - 1].date : null;
+  if (lastUp && lastUp > labels[labels.length - 1]) labels.push(...addBusinessDays(labels[labels.length - 1], lastUp));
+  const n = labels.length, lastClose = ch.close[ch.close.length - 1];
+  const idxOf = iso => { let lo = 0, hi = n - 1; while (lo < hi) { const mid = (lo + hi) >> 1; labels[mid] < iso ? lo = mid + 1 : hi = mid; } return lo; };
+  const pad = arr => (arr || []).concat(Array(Math.max(0, n - (arr || []).length)).fill(null));
+  const evSets = GROUPS.map(g => {
+    const pts = Array(n).fill(null), evs = Array(n).fill(null);
+    [...s.events, ...s.upcoming].filter(e => g.types.includes(e.type) && e.date >= labels[0]).forEach(e => {
+      const i = idxOf(e.date); pts[i] = ch.close[i] ?? lastClose; (evs[i] ||= []).push(e);
+    });
+    if (!evs.some(Boolean)) return null;
+    return {label: g.label, data: pts, events: evs, showLine: false, pointStyle: g.style, pointRadius: 6, pointHoverRadius: 9,
+            backgroundColor: css(g.color), borderColor: css('--card'), borderWidth: 1.5, order: 0};
+  }).filter(Boolean);
+  charts[tab]?.destroy();
+  charts[tab] = new Chart(document.getElementById('chart-' + tab), {
+    type: 'line',
+    data: {labels, datasets: [
+      {label: 'Price', data: pad(ch.close), borderColor: css('--c-price-line'), borderWidth: 1.6, pointRadius: 0, tension: 0.1, order: 2},
+      {label: '6-month MA', data: pad(ch.ma6m), borderColor: css('--c-ma'), borderWidth: 2.2, borderDash: [6, 4], pointRadius: 0, order: 3},
+      {label: '50-DMA', data: pad(ch.dma50), borderColor: css('--c-dma'), borderWidth: 1, pointRadius: 0, order: 4},
+      ...evSets,
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false, spanGaps: true,
+      interaction: {mode: 'nearest', intersect: false, axis: 'x'},
+      scales: {
+        x: {ticks: {color: css('--muted'), maxTicksLimit: 9, autoSkip: true, callback: (v, i) => fdate(labels[i])}, grid: {display: false}},
+        y: {ticks: {color: css('--muted'), callback: v => '₹' + fmt(v)}, grid: {color: css('--line')}},
+      },
+      plugins: {
+        legend: {labels: {color: css('--muted'), usePointStyle: true, boxHeight: 7, filter: i => i.datasetIndex < 3}},
+        tooltip: {filter: i => i.raw != null, callbacks: {
+          title: items => fdate(labels[items[0].dataIndex]),
+          label: ctx => ctx.dataset.events
+            ? ctx.dataset.events[ctx.dataIndex].map(e => `${tl(e.type)}${srcTag(e) ? ' (' + srcTag(e) + ')' : ''}: ${e.title.slice(0, 90)}`)
+            : `${ctx.dataset.label}: ₹${fmt(ctx.raw, 1)}`,
+        }},
+      },
+    },
+  });
+}
+
+// ---------------------------------------------------------------- watchlist
+async function syncWatch(push) {
+  store.set('scr.watchlist', watch);
+  if (!LIVE) return;
+  try {
+    if (push) await fetch('/api/watchlist', {method: 'POST', body: JSON.stringify(watch)});
+    else {
+      const server = await (await fetch('/api/watchlist')).json();
+      watch = [...new Set([...server, ...watch])];
+      store.set('scr.watchlist', watch);
+      if (watch.length !== server.length) await fetch('/api/watchlist', {method: 'POST', body: JSON.stringify(watch)});
+    }
+  } catch {}
+}
+function toggleWatch(sym) {
+  watch = watch.includes(sym) ? watch.filter(s => s !== sym) : [...watch, sym];
+  syncWatch(true);
+  refreshSides();
+  for (const tab of ['dash', 'analyze', 'watch']) if (sel[tab] === sym && stock(sym)) {
+    const b = $(`#main-${tab} .acts [data-star]`);
+    if (b) { const on = watch.includes(sym); b.textContent = on ? '★ In watchlist' : '☆ Add to watchlist'; b.className = on ? '' : 'primary'; }
+  }
+}
+
+// ---------------------------------------------------------------- tabs, clicks
+function refreshSides() { renderDashSide(); renderAnalyzeSide(); renderWatchSide(); }
+function showTab(t) {
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  for (const k of ['dash', 'analyze', 'watch', 'docs']) $('#tab-' + k).classList.toggle('hidden', k !== t);
+  if (t !== 'docs' && !sel[t]) {
+    const first = t === 'dash' ? (DATA.picks.Large?.[0] || DATA.stocks[0]?.symbol) : t === 'watch' ? watch[0] :
+      [...DATA.stocks].sort((a, b) => b.score - a.score)[0]?.symbol;
+    if (first) openStock(first, t);
+    else if (t === 'watch') $('#main-watch').innerHTML = '<div class="empty">Add stocks to your watchlist to see them here.</div>';
+  }
+  if (t === 'analyze') $('#q').focus();
+  store.set('scr.tab', t);
+}
+$('#tabs').onclick = e => { const b = e.target.closest('button'); if (b) showTab(b.dataset.tab); };
+document.addEventListener('click', e => {
+  const star = e.target.closest('[data-star]');
+  if (star) { e.stopPropagation(); toggleWatch(star.dataset.star); return; }
+  const go = e.target.closest('[data-goto]');
+  if (go) { e.preventDefault(); showTab(go.dataset.goto); return; }
+  const card = e.target.closest('[data-open]');
+  if (card) { openStock(card.dataset.open, card.dataset.tab); return; }
+  const evb = e.target.closest('.evfilter button');
+  if (evb) {
+    const tab = evb.parentElement.dataset.evf;
+    evb.parentElement.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === evb));
+    renderEvents(stock(sel[tab]), tab, evb.dataset.g);
+  }
+});
+
+// ---------------------------------------------------------------- refresh
+function setStatus(t) { $('#status').textContent = t; }
+function stampStatus() { setStatus(`Updated ${DATA.generated} · ${DATA.stocks.length} stocks${LIVE ? '' : ' · shared view'}`); }
+
+async function reloadData() {
+  const r = await fetch('data.json?t=' + Date.now(), {cache: 'no-store'});
+  if (!r.ok) throw new Error('no data.json');
+  DATA = await r.json();
+  indexData();
+  refreshSides();
+  for (const t of ['dash', 'analyze', 'watch']) if (sel[t] && stock(sel[t]) && !$('#tab-' + t).classList.contains('hidden')) renderDetail(stock(sel[t]), t);
+  stampStatus();
+}
+
+$('#refresh').onclick = async () => {
+  const btn = $('#refresh');
+  if (!LIVE) {
+    btn.disabled = true; setStatus('Checking for the latest data…');
+    try { await reloadData(); } catch { location.reload(); }
+    btn.disabled = false; return;
+  }
+  btn.disabled = true;
+  try { await fetch('/api/refresh', {method: 'POST'}); } catch { btn.disabled = false; return; }
+  const poll = setInterval(async () => {
+    let st; try { st = await (await fetch('/api/status')).json(); } catch { return; }
+    if (st.running) { setStatus(`Refreshing ${st.done}/${st.total || '…'} ${st.current ? '(' + st.current + ')' : ''}…`); return; }
+    clearInterval(poll); btn.disabled = false;
+    if (st.error) { setStatus('Refresh failed: ' + st.error); return; }
+    Object.keys(extra).forEach(k => delete extra[k]);
+    await reloadData();
+  }, 3000);
+};
+
+// ---------------------------------------------------------------- theme, docs, boot
+$('#theme').onclick = () => {
+  const r = document.documentElement;
+  const dark = r.dataset.theme ? r.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  r.dataset.theme = dark ? 'light' : 'dark';
+  store.set('scr.theme', r.dataset.theme);
+  refreshSides();
+  for (const t of ['dash', 'analyze', 'watch']) if (sel[t] && stock(sel[t])) renderDetail(stock(sel[t]), t);
+};
+function renderDocs() {
+  const md = DOCS || '# Documentation\n\nREADME.md was not found when this page was built.';
+  $('#docs').innerHTML = window.marked ? marked.parse(md) : `<pre>${esc(md)}</pre>`;
+  $('#docs').querySelectorAll('a[href^="http"]').forEach(a => { a.target = '_blank'; a.rel = 'noopener'; });
+}
+
+(async function boot() {
+  const theme = store.get('scr.theme', null);
+  if (theme) document.documentElement.dataset.theme = theme;
+  if (!DATA) { try { DATA = await (await fetch('data.json', {cache: 'no-store'})).json(); } catch { document.body.innerHTML = '<p style="padding:40px">No data yet: run the screener first.</p>'; return; } }
+  indexData();
+  try { LIVE = (await fetch('/api/ping', {cache: 'no-store'})).ok; } catch { LIVE = false; }
+  if (LIVE) await syncWatch(false);
+  $('#q').placeholder = LIVE ? 'Search any NSE/BSE company…' : 'Search today\'s screened stocks…';
+  stampStatus();
+  renderDocs();
+  refreshSides();
+  const t = store.get('scr.tab', 'dash');
+  showTab(['dash', 'analyze', 'watch', 'docs'].includes(t) ? t : 'dash');
+  if (t !== 'dash') { const f = DATA.picks.Large?.[0]; if (f) openStock(f, 'dash'); }
+  // pick up the 8 AM refresh in a tab that's left open
+  setInterval(() => reloadData().catch(() => {}), 3600e3);
+})();
+</script>
+</body>
+</html>
