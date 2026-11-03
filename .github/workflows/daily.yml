@@ -20,6 +20,7 @@ jobs:
     timeout-minutes: 150   # ~500 stocks x 4 polite requests ≈ 60 min
     env:
       TZ: Asia/Kolkata
+      PYTHONUNBUFFERED: "1"   # stream progress to the Actions log as it happens
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
