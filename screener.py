@@ -49,6 +49,9 @@ PICKS_PER_BUCKET = 3
 TOP_CATALYSTS = 3
 MA_6M = 126            # ~6 months of trading days
 CATALYST_WINDOW = 30   # days: how "fresh" an event must be to count as a catalyst
+# False = screen only universe.txt (+ watchlist). True = also screen the whole Nifty 500.
+# Use `python screener.py --pick-universe 50` after a full Nifty 500 run to choose the focus list.
+USE_NIFTY500 = False
 REQUEST_DELAY = float(os.environ.get("SCREENER_DELAY", "1.5"))    # seconds between network calls; be polite to screener.in
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) personal-screener/1.0"}
@@ -731,9 +734,9 @@ def nifty500():
 
 
 def load_symbols():
-    syms = nifty500()
-    syms += [ln.strip() for ln in (ROOT / "universe.txt").read_text().splitlines()
-             if ln.strip() and not ln.startswith("#")]
+    syms = nifty500() if USE_NIFTY500 else []
+    syms += [ln.split("#")[0].strip() for ln in (ROOT / "universe.txt").read_text().splitlines()
+             if ln.split("#")[0].strip()]
     wl = ROOT / "watchlist.json"
     if wl.exists():
         try:
@@ -847,11 +850,39 @@ def analyse_one(sym, fetcher=None):
     return r
 
 
+def pick_universe(n, source=None):
+    """Write the top-n stocks of the latest full analysis to universe.txt, balanced across caps."""
+    data = json.loads(Path(source or OUT_DIR / "data.json").read_text(encoding="utf-8"))
+    stocks = [s for s in data["stocks"] if s.get("bucket")]
+    per = {"Large": math.ceil(n / 3), "Mid": math.ceil(n / 3), "Small": n - 2 * math.ceil(n / 3)}
+    chosen = []
+    for b, k in per.items():
+        chosen += sorted((s for s in stocks if s["bucket"] == b), key=lambda s: -s["score"])[:k]
+    if len(chosen) < n:  # a bucket ran short: fill with the next best overall
+        have = {s["symbol"] for s in chosen}
+        chosen += sorted((s for s in stocks if s["symbol"] not in have), key=lambda s: -s["score"])[: n - len(chosen)]
+    lines = [f"# Focus list: top {n} by score from the {len(stocks)}-stock analysis of {data['generated']}",
+             "# (balanced across caps). Regenerate: set USE_NIFTY500 = True, run, then",
+             f"#   python screener.py --pick-universe {n}   and set USE_NIFTY500 back to False.",
+             "# Edit freely: one NSE symbol per line."]
+    for b in ("Large", "Mid", "Small"):
+        lines += ["", f"# --- {b} caps ---"]
+        lines += [f"{s['symbol']:<12} # score {s['score']}" for s in chosen if s["bucket"] == b]
+    (ROOT / "universe.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return chosen
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--refresh", action="store_true", help="ignore today's cache")
     ap.add_argument("--limit", type=int, help="only process first N symbols (testing)")
+    ap.add_argument("--pick-universe", type=int, metavar="N",
+                    help="write the top N of the latest output/data.json to universe.txt and exit")
     args = ap.parse_args()
+    if args.pick_universe:
+        chosen = pick_universe(args.pick_universe)
+        print(f"universe.txt now has {len(chosen)} stocks")
+        return
     build(refresh=args.refresh, limit=args.limit)
 
 

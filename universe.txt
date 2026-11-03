@@ -1,108 +1,60 @@
-# Stock universe for the screener (NSE symbols as used in screener.in URLs).
-# One symbol per line. Lines starting with # are ignored.
-# Buckets (large/mid/small) are decided automatically from live market cap,
-# so the headings below are only for your own organisation. Add or remove freely.
+# Focus list: top 50 by score from the 470-stock analysis of 03 Nov 2026, 12:35
+# (balanced across caps). Regenerate: set USE_NIFTY500 = True, run, then
+#   python screener.py --pick-universe 50   and set USE_NIFTY500 back to False.
+# Edit freely: one NSE symbol per line.
 
 # --- Large caps ---
-RELIANCE
-TCS
-HDFCBANK
-ICICIBANK
-INFY
-BHARTIARTL
-SBIN
-LT
-ITC
-HINDUNILVR
-BAJFINANCE
-KOTAKBANK
-AXISBANK
-MARUTI
-SUNPHARMA
-M&M
-TITAN
-NTPC
-POWERGRID
-ULTRACEMCO
-HAL
-BEL
-TATASTEEL
-ADANIPORTS
-ONGC
-COALINDIA
-JSWSTEEL
-HCLTECH
-BAJAJ-AUTO
-TRENT
-DIVISLAB
-CIPLA
-SIEMENS
-VEDL
+LAURUSLABS   # score 78.6
+GAIL         # score 70.7
+ETERNAL      # score 70.5
+MARICO       # score 70.5
+TECHM        # score 70.0
+TVSMOTOR     # score 68.7
+GRASIM       # score 66.4
+INDHOTEL     # score 64.0
+TRENT        # score 64.0
+GROWW        # score 62.7
+BOSCHLTD     # score 61.4
+PERSISTENT   # score 59.8
+KOTAKBANK    # score 59.4
+NYKAA        # score 58.1
+LT           # score 58.0
+JSWSTEEL     # score 57.6
+ADANIPORTS   # score 56.3
 
 # --- Mid caps ---
-PERSISTENT
-DIXON
-COFORGE
-POLYCAB
-CUMMINSIND
-BHARATFORG
-MAXHEALTH
-INDHOTEL
-SUPREMEIND
-ASTRAL
-VOLTAS
-FEDERALBNK
-IDFCFIRSTB
-AUBANK
-MPHASIS
-LUPIN
-AUROPHARMA
-TORNTPOWER
-BSE
-MAZDOCK
-COCHINSHIP
-SOLARINDS
-KPITTECH
-PIIND
-TATAELXSI
-APLAPOLLO
-JUBLFOOD
-GODREJPROP
-PHOENIXLTD
-SUZLON
-IRCTC
-KEI
-RVNL
-BDL
+CUPID        # score 80.6
+ATHERENERG   # score 80.0
+ACUTAAS      # score 76.0
+COFORGE      # score 75.2
+SHYAMMETL    # score 74.0
+LTTS         # score 72.0
+PPLPHARMA    # score 70.0
+NAVINFLUOR   # score 69.1
+PTCIL        # score 68.8
+SONACOMS     # score 62.8
+KPRMILL      # score 61.3
+POONAWALLA   # score 60.1
+MRPL         # score 59.3
+ITCHOTELS    # score 57.7
+APLAPOLLO    # score 57.2
+EMCURE       # score 56.1
+MCX          # score 56.0
 
 # --- Small caps ---
-KAYNES
-BEML
-GRSE
-DATAPATTNS
-NEWGEN
-CDSL
-ANGELONE
-KFINTECH
-CAMS
-TITAGARH
-RAILTEL
-IRCON
-NBCC
-HBLENGINE
-KIRLOSENG
-ELECON
-TRITURBINE
-GPIL
-PRAJIND
-ZENTEC
-ASTRAMICRO
-SYRMA
-TEJASNET
-HFCL
-WELCORP
-NETWEB
-INOXWIND
-KPIGREEN
-TDPOWERSYS
-SHILPAMED
+PVRINOX      # score 87.0
+GABRIEL      # score 79.6
+ZENTEC       # score 79.4
+CHENNPETRO   # score 77.8
+ENGINERSIN   # score 69.7
+CYIENT       # score 67.5
+CHOICEIN     # score 66.2
+AFFLE        # score 65.3
+HONASA       # score 62.7
+FSL          # score 62.0
+TARIL        # score 59.8
+HEGAM        # score 58.3
+BEML         # score 58.0
+IGIL         # score 58.0
+RUBICON      # score 57.4
+CEMPRO       # score 56.9
