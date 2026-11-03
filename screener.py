@@ -49,7 +49,7 @@ PICKS_PER_BUCKET = 3
 TOP_CATALYSTS = 3
 MA_6M = 126            # ~6 months of trading days
 CATALYST_WINDOW = 30   # days: how "fresh" an event must be to count as a catalyst
-REQUEST_DELAY = 1.5    # seconds between network calls; be polite to screener.in
+REQUEST_DELAY = float(os.environ.get("SCREENER_DELAY", "1.5"))    # seconds between network calls; be polite to screener.in
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) personal-screener/1.0"}
 TODAY = dt.date.today()
@@ -196,7 +196,8 @@ NEG_CONTEXT = re.compile(r"sebi|gst|tax|court|tribunal|nclt|nclat|penalt|show ca
                          r"regulatory action|enforcement", re.I)
 RULES = [
     ("negative", re.compile(r"resign|penalt|show cause|fraud|default|insolvency|search (and|&) seizure|raid|"
-                            r"downgrad|pledge|suspension|cessation of (cfo|ceo|md|auditor)|litigation|"
+                            r"downgrad|pledge|encumb|promoters? .{0,25}(sell|sold|offload|stake sale|block deal|trim)|"
+                            r"suspension|cessation of (cfo|ceo|md|auditor)|litigation|"
                             r"forensic|qualified opinion|fire at|strike|lockout|plant shutdown", re.I)),
     ("order", re.compile(r"receipt of order|award of order|bag(s|ged)? .{0,40}(order|contract)|"
                          r"(secur|receiv|win|won|award)\w* .{0,60}\b(orders?|contracts?|LoA|LOI|project)\b|"
@@ -671,7 +672,11 @@ def analyse(fetcher, sym):
         return None
 
     ann_ev, upcoming = announcement_events(c)
-    events = ann_ev + shareholding_events(c) + results_events(c) + price_events(df) + fetch_news(fetcher, sym, c["name"])
+    events = ann_ev + shareholding_events(c) + results_events(c) + price_events(df)
+    try:
+        events += fetch_news(fetcher, sym, c["name"])
+    except Exception as ex:  # news is a bonus: never drop a stock because the feed failed
+        print(f"    news unavailable for {sym}: {ex}")
     events += [{**r, "type": "rating", "impact": 0} for r in c["ratings"]
                if r["date"] >= TODAY - dt.timedelta(days=365)]
     events = [e for e in events if e["date"] >= TODAY - dt.timedelta(days=365)]
@@ -706,9 +711,29 @@ def jsonable(o):
     raise TypeError(type(o))
 
 
+NIFTY500_URL = "https://www.niftyindices.com/IndexConstituent/ind_nifty500list.csv"
+
+
+def nifty500():
+    """Current Nifty 500 symbols; refreshed from niftyindices.com, falling back to the saved copy."""
+    path = ROOT / "nifty500.csv"
+    try:
+        r = requests.get(NIFTY500_URL, headers=HEADERS, timeout=20)
+        if r.ok and r.text.startswith("Company Name") and r.text.count("\n") > 400:
+            path.write_text(r.text, encoding="utf-8")
+    except requests.RequestException:
+        pass
+    if not path.exists():
+        return []
+    import csv
+    return [row["Symbol"].strip() for row in csv.DictReader(path.read_text(encoding="utf-8").splitlines())
+            if row.get("Symbol")]
+
+
 def load_symbols():
-    syms = [ln.strip() for ln in (ROOT / "universe.txt").read_text().splitlines()
-            if ln.strip() and not ln.startswith("#")]
+    syms = nifty500()
+    syms += [ln.strip() for ln in (ROOT / "universe.txt").read_text().splitlines()
+             if ln.strip() and not ln.startswith("#")]
     wl = ROOT / "watchlist.json"
     if wl.exists():
         try:
@@ -772,17 +797,36 @@ def build(refresh=False, limit=None, progress=None):
     return data
 
 
+SUMMARY_KEYS = ("symbol", "name", "url", "mcap", "bucket", "pe", "roce", "score", "why", "metrics", "promoter")
+
+
+def summary(r):
+    """Light per-stock record for data.json; the full record (chart + events) goes in stocks/<SYM>.json."""
+    closes = r["chart"]["close"][-120:]
+    step = max(1, len(closes) // 40)
+    s = {k: r[k] for k in SUMMARY_KEYS}
+    s["spark"] = closes[::step] + ([closes[-1]] if (len(closes) - 1) % step else [])
+    s["n_events"] = len(r["events"]) + len(r["upcoming"])
+    return s
+
+
 def write_outputs(data):
     OUT_DIR.mkdir(exist_ok=True)
-    blob = to_json(data)
-    (OUT_DIR / "data.json").write_text(blob, encoding="utf-8")
+    stock_dir = OUT_DIR / "stocks"
+    stock_dir.mkdir(exist_ok=True)
+    for f in stock_dir.glob("*.json"):
+        f.unlink()
+    for r in data["stocks"]:
+        (stock_dir / f"{safe(r['symbol'])}.json").write_text(to_json(r), encoding="utf-8")
+    light = {**data, "stocks": [summary(r) for r in data["stocks"]]}
+    (OUT_DIR / "data.json").write_text(to_json(light), encoding="utf-8")
+
     docs = (ROOT / "README.md").read_text(encoding="utf-8")
     page = (ROOT / "template.html").read_text(encoding="utf-8")
-    page = page.replace("/*__DATA__*/null", blob.replace("</", "<\\/"))
     page = page.replace("/*__DOCS__*/null", json.dumps(docs).replace("</", "<\\/"))
     (OUT_DIR / "index.html").write_text(page, encoding="utf-8")
-    (OUT_DIR / "latest.html").write_text(page, encoding="utf-8")
-    (OUT_DIR / f"screener_{TODAY.isoformat()}.html").write_text(page, encoding="utf-8")
+    for old in ("latest.html", *[p.name for p in OUT_DIR.glob("screener_*.html")]):
+        (OUT_DIR / old).unlink(missing_ok=True)
 
     rows = []
     by_sym = {r["symbol"]: r for r in data["stocks"]}

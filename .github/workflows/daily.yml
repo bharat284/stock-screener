@@ -17,7 +17,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 150   # ~500 stocks x 4 polite requests ≈ 60 min
     env:
       TZ: Asia/Kolkata
     steps:

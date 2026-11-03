@@ -185,6 +185,15 @@ const tl = t => (DATA.type_label || {})[t] || t;
 let LIVE = false;                     // true when served by app.py (live search / refresh)
 let bySym = {};
 const extra = {};                     // stocks analysed on demand (not in today's screen)
+const full = {};                      // full records (chart + events), loaded when a stock is opened
+const safeName = sym => sym.replace(/[^A-Za-z0-9_-]/g, '_');
+async function getFull(sym) {
+  if (full[sym]) return full[sym];
+  if (extra[sym]) return (full[sym] = extra[sym]);
+  const r = await fetch(`stocks/${encodeURIComponent(safeName(sym))}.json?d=${encodeURIComponent(DATA.generated)}`);
+  if (!r.ok) throw new Error('details not found');
+  return (full[sym] = await r.json());
+}
 const sel = {dash: null, analyze: null, watch: null};
 const charts = {};
 let watch = store.get('scr.watchlist', []);
@@ -196,7 +205,7 @@ const stock = sym => bySym[sym] || extra[sym];
 
 // ---------------------------------------------------------------- cards
 function spark(s) {
-  const c = (s.chart?.close || []).slice(-120);
+  const c = s.spark || (s.chart?.close || []).slice(-120);
   if (c.length < 2) return '';
   const lo = Math.min(...c), hi = Math.max(...c), w = 84, h = 26;
   const pts = c.map((v, i) => `${(i / (c.length - 1) * w).toFixed(1)},${(h - (v - lo) / (hi - lo || 1) * h).toFixed(1)}`).join(' ');
@@ -249,7 +258,7 @@ function renderAnalyzeSide() {
   $('#side-analyze').innerHTML =
     (remote.length ? `<div class="sec"><h3><span>From screener.in</span></h3>${remote.map(h => stockCard(h.symbol, 'analyze', {name: h.name})).join('')}</div>` : '') +
     `<div class="sec"><h3><span>${q ? 'Matches in today\'s screen' : 'All screened stocks · by score'}</span><span>${list.length}</span></h3>
-     ${list.map(s => stockCard(s.symbol, 'analyze')).join('') || `<div class="empty">${LIVE ? 'Searching screener.in…' : 'No match in today\'s screen. Live search of any listed company works in the desktop app.'}</div>`}</div>`;
+     ${list.slice(0, q ? 200 : 150).map(s => stockCard(s.symbol, 'analyze')).join('')}${list.length > (q ? 200 : 150) ? `<p class="muted small">Showing the top ${q ? 200 : 150}. Type to narrow down.</p>` : ''}${list.length ? '' : `<div class="empty">${LIVE ? 'Searching screener.in…' : 'No match in today\'s screen. Live search of any listed company works in the desktop app.'}</div>`}</div>`;
 }
 $('#bchips').innerHTML = ['All', 'Large', 'Mid', 'Small'].map(b => `<button data-b="${b}" class="${b==='All'?'on':''}">${b}</button>`).join('');
 $('#bchips').onclick = e => { const b = e.target.closest('button'); if (!b) return; bucketFilter = b.dataset.b;
@@ -284,7 +293,11 @@ async function openStock(sym, tab) {
     if (sel[tab] !== sym) return;
     refreshSides();
   }
-  renderDetail(stock(sym), tab);
+  let f;
+  if (!full[sym] && !extra[sym]) main.innerHTML = `<div class="loading">Loading ${esc(sym)}…</div>`;
+  try { f = await getFull(sym); } catch (e) { main.innerHTML = `<div class="empty">Couldn't load ${esc(sym)}: ${esc(e.message)}</div>`; return; }
+  if (sel[tab] !== sym) return;
+  renderDetail(f, tab);
   if (matchMedia('(max-width:900px)').matches) main.scrollIntoView({behavior: 'smooth', block: 'start'});
 }
 
@@ -415,7 +428,7 @@ function toggleWatch(sym) {
   watch = watch.includes(sym) ? watch.filter(s => s !== sym) : [...watch, sym];
   syncWatch(true);
   refreshSides();
-  for (const tab of ['dash', 'analyze', 'watch']) if (sel[tab] === sym && stock(sym)) {
+  for (const tab of ['dash', 'analyze', 'watch']) if (sel[tab] === sym && full[sym]) {
     const b = $(`#main-${tab} .acts [data-star]`);
     if (b) { const on = watch.includes(sym); b.textContent = on ? '★ In watchlist' : '☆ Add to watchlist'; b.className = on ? '' : 'primary'; }
   }
@@ -447,7 +460,7 @@ document.addEventListener('click', e => {
   if (evb) {
     const tab = evb.parentElement.dataset.evf;
     evb.parentElement.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === evb));
-    renderEvents(stock(sel[tab]), tab, evb.dataset.g);
+    if (full[sel[tab]]) renderEvents(full[sel[tab]], tab, evb.dataset.g);
   }
 });
 
@@ -459,9 +472,10 @@ async function reloadData() {
   const r = await fetch('data.json?t=' + Date.now(), {cache: 'no-store'});
   if (!r.ok) throw new Error('no data.json');
   DATA = await r.json();
+  Object.keys(full).forEach(k => delete full[k]);
   indexData();
   refreshSides();
-  for (const t of ['dash', 'analyze', 'watch']) if (sel[t] && stock(sel[t]) && !$('#tab-' + t).classList.contains('hidden')) renderDetail(stock(sel[t]), t);
+  for (const t of ['dash', 'analyze', 'watch']) if (sel[t] && stock(sel[t])) openStock(sel[t], t);
   stampStatus();
 }
 
@@ -491,7 +505,7 @@ $('#theme').onclick = () => {
   r.dataset.theme = dark ? 'light' : 'dark';
   store.set('scr.theme', r.dataset.theme);
   refreshSides();
-  for (const t of ['dash', 'analyze', 'watch']) if (sel[t] && stock(sel[t])) renderDetail(stock(sel[t]), t);
+  for (const t of ['dash', 'analyze', 'watch']) if (sel[t] && full[sel[t]]) renderDetail(full[sel[t]], t);
 };
 function renderDocs() {
   const md = DOCS || '# Documentation\n\nREADME.md was not found when this page was built.';

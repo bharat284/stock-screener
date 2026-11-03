@@ -1,6 +1,6 @@
 # Daily Stock Screener: Documentation
 
-A personal screener for NSE stocks. Every morning it scans a list of stocks, scores each one on
+A personal screener for NSE stocks. Every morning it scans the **Nifty 500** (plus any extra stocks in `universe.txt` and your watchlist), scores each one on
 **trend, momentum, fresh catalysts and fundamentals**, and shows:
 
 - **3 Large-cap, 3 Mid-cap and 3 Small-cap picks** expected to rise
@@ -19,7 +19,7 @@ A personal screener for NSE stocks. Every morning it scans a list of stocks, sco
 | Tab | What it does |
 |---|---|
 | **Dashboard** | Stock cards are on the left: Large/Mid/Small picks, top catalysts and your watchlist. Click any card to see the expanded analysis on the right. |
-| **Analyze** | Search for any stock. In the desktop app this searches **every listed company on screener.in** and analyses it on demand (~10 s). In the shared web version it searches the stocks in today's screen. Filter by cap, sorted by score. |
+| **Analyze** | Search for any stock. The shared web version covers the ~500 stocks screened each morning. The desktop app also searches **every listed company on screener.in** and analyses it on demand (~10 s). Filter by cap, sorted by score. |
 | **Watchlist** | Your starred stocks, opened the same way as any other card. |
 | **Documentation** | This page. |
 
@@ -29,8 +29,9 @@ Tap **☆** on any card, or **☆ Add to watchlist** in the expanded view.
 - **Shared web version:** saved in your own browser only (each friend has their own).
 
 ### Refresh button
-- **Desktop app:** re-fetches everything from screener.in and the web (≈10 minutes for ~100 stocks; progress is shown in the top bar).
+- **Desktop app:** re-fetches everything from screener.in and the web (about 1 hour for ~500 stocks; progress is shown in the top bar).
 - **Shared web version:** loads the most recent published data.
+- **Fresh run on demand (owner):** on GitHub open the repo → **Actions** → **Daily screener** → **Run workflow**. This also works from the GitHub mobile app. The site updates when the run finishes (~1 hour).
 
 ### Expanded view
 - **KPIs:** price, 1M/3M return, 6-month MA, 50-DMA, RSI, 52-week high, market cap, P/E, ROCE, promoter holding.
@@ -128,11 +129,13 @@ Requests are rate-limited (1.5 s apart) and cached per day in `cache\YYYY-MM-DD\
 | `screener.py` | Fetches, scores and builds `output\index.html` + `output\data.json` |
 | `app.py` | Desktop app: local server with live search, on-demand analysis, refresh, watchlist |
 | `template.html` | The dashboard UI |
-| `universe.txt` | Stocks scanned daily (one NSE symbol per line) |
+| `universe.txt` | Extra stocks scanned daily on top of the Nifty 500 (one NSE symbol per line) |
+| `nifty500.csv` | Nifty 500 constituents (refreshed each run) |
+| `.github/workflows/daily.yml` | Daily cloud run + GitHub Pages deploy |
 | `watchlist.json` | Your watchlist (desktop app) |
 | `run_daily.bat` | What the 8 AM scheduled task runs |
 | `open_screener.bat` | Double-click: starts the desktop app and opens it in your browser |
-| `output\` | `index.html`, `data.json`, dated reports, `picks_YYYY-MM-DD.csv` |
+| `output\` | `index.html`, `data.json` (summary), `stocks\<SYM>.json` (chart + events per stock), `picks_YYYY-MM-DD.csv` |
 | `logs\run.log` | Log of each scheduled run |
 
 ### Commands
@@ -144,11 +147,13 @@ open_screener.bat                          desktop app at http://127.0.0.1:8765
 ```
 
 ### Daily 8 AM refresh
-The Windows Task Scheduler task **"Daily Stock Screener"** runs `run_daily.bat` at 08:00 every day.
-If the PC is off at 8 AM, it runs at the next startup. An open dashboard tab reloads its data every hour.
+- **Shared website (GitHub Pages):** the GitHub Actions workflow `.github/workflows/daily.yml` runs on GitHub's servers at **08:00 IST** every day and publishes `output/` to GitHub Pages. Your PC can be off. GitHub sometimes starts scheduled runs 5–30 minutes late, and a run takes about 1 hour.
+- **Desktop app:** the Windows Task Scheduler task **"Daily Stock Screener"** runs `run_daily.bat` at 08:00 too. If the PC is off at 8 AM, it runs at the next startup.
+- An open dashboard tab reloads its data every hour.
 
 ### Changing the stock list
-Edit `universe.txt`. Buckets come from market cap, so the headings in the file are only for you.
+- The **Nifty 500** list is downloaded from niftyindices.com on every run. `nifty500.csv` is the fallback copy.
+- Add extra symbols to `universe.txt`. Buckets come from market cap, so the headings in the file are only for you.
 Symbols must match screener.in URLs (`screener.in/company/<SYMBOL>/`).
 
 ---
@@ -169,4 +174,4 @@ Without a login, screener.in shows only the 5 latest announcements per company. 
 - **Shareholding timing:** changes are dated at quarter end. They are disclosed about 3 weeks later.
 - **Order sizes:** only parsed when the rupee or dollar amount appears in the filing summary or headline.
 - **BSE/NSE APIs:** not used. Both block automated requests.
-- **Shared web version:** shows the data as of the last publish. Live search and full refresh need the desktop app.
+- **Shared web version:** shows the data as of the last daily run. On-click analysis of stocks outside the ~500 and a viewer-triggered full refresh need the desktop app. GitHub Pages can't run code per request.
